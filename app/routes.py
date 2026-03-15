@@ -1,14 +1,17 @@
 from flask import Blueprint, request, jsonify
 from app.vector_db_manager import VectorDBManager
+from app.pdf_handler import PDFHandler
 from app.ai_assistant import AIAssistant
 from config.settings import AIAssistantConfig
 
 # Create blueprints
 main_bp = Blueprint('main', __name__)
 assistant_bp = Blueprint('assistant', __name__, url_prefix='/api/assistant')
+pdf_bp = Blueprint('pdf', __name__, url_prefix='/api/pdf')
 
 # Initialize components
 vector_db = VectorDBManager()
+pdf_handler = PDFHandler()
 ai_assistant = AIAssistant()
 
 @main_bp.route('/')
@@ -48,6 +51,42 @@ def query():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@pdf_bp.route('/upload', methods=['POST'])
+def upload_pdf():
+    """Upload and index a PDF document"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    if file and pdf_handler.allowed_file(file.filename):
+        try:
+            # Save file
+            filepath = pdf_handler.save_file(file)
+
+            # Extract text
+            text_content = pdf_handler.extract_text(filepath)
+
+            # Index in vector DB
+            doc_id = vector_db.add_document(
+                filename=file.filename,
+                content=text_content
+            )
+
+            return jsonify({
+                'status': 'success',
+                'message': 'PDF uploaded and indexed successfully',
+                'document_id': doc_id,
+                'filename': file.filename
+            }), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify({'error': 'File type not allowed'}), 400
 
 @assistant_bp.route('/documents', methods=['GET'])
 def list_documents():

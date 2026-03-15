@@ -16,8 +16,9 @@ def create_app():
     os.makedirs('./vector_db', exist_ok=True)
     
     # Register blueprints
-    from app.routes import main_bp, assistant_bp
+    from app.routes import main_bp, assistant_bp, pdf_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(assistant_bp)
+    app.register_blueprint(pdf_bp)
     
     return app
