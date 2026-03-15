@@ -87,13 +87,139 @@
         }
 
         .main-area {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            grid-column: 1;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 25px;
             width: 100%;
-            max-width: 1000px;
+            max-width: 1400px;
             margin: 0 auto;
+        }
+
+        @media (max-width: 1024px) {
+            .main-area {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .upload-section {
+            background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+            height: fit-content;
+        }
+
+        .upload-section h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #0A5B7A;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-upload-wrapper {
+            border: 2px dashed #0A5B7A;
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            background: rgba(10, 91, 122, 0.02);
+        }
+
+        .file-upload-wrapper:hover {
+            background: rgba(10, 91, 122, 0.05);
+            border-color: #208EB0;
+        }
+
+        .file-upload-wrapper i {
+            font-size: 2.5em;
+            color: #0A5B7A;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #0A5B7A 0%, #208EB0 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            font-family: 'Cairo', sans-serif;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(10, 91, 122, 0.3);
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .document-list {
+            margin-top: 30px;
+        }
+
+        .document-list h3 {
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            color: #444;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+
+        .doc-item {
+            background: white;
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+            border: 1px solid #eee;
+            transition: all 0.2s ease;
+        }
+
+        .doc-item:hover {
+            border-color: #0A5B7A;
+            transform: translateX(-5px);
+        }
+
+        .doc-icon {
+            font-size: 1.2em;
+        }
+
+        .doc-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .doc-name {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 600;
+        }
+
+        .doc-meta {
+            font-size: 0.8em;
+            color: #888;
         }
 
         .chat-container {
@@ -289,6 +415,24 @@
         </div>
 
         <div class="main-area">
+            <div class="upload-section">
+                <h2><span>📄</span> رفع مستندات BTEC</h2>
+                <div class="file-upload-wrapper" onclick="document.getElementById('fileInput').click()">
+                    <i>📁</i>
+                    <p id="fileNameDisplay">اضغط لرفع ملف PDF</p>
+                    <input type="file" id="fileInput" accept=".pdf">
+                </div>
+                <button class="upload-btn" id="uploadBtn">رفع وفهرسة المستند</button>
+                <div id="uploadStatus"></div>
+
+                <div class="document-list">
+                    <h3>المستندات المفهرسة</h3>
+                    <div id="docsList">
+                        <div class="status-message status-info">جاري تحميل المستندات...</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="chat-container">
                 <div class="messages" id="messagesContainer">
                     <div class="message assistant">
@@ -319,6 +463,109 @@
         const queryInput = document.getElementById('queryInput');
         const sendBtn = document.getElementById('sendBtn');
         const messagesContainer = document.getElementById('messagesContainer');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const docsList = document.getElementById('docsList');
+        const uploadStatus = document.getElementById('uploadStatus');
+
+        // Load documents on startup
+        fetchDocuments();
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                fileNameDisplay.textContent = e.target.files[0].name;
+                fileNameDisplay.style.color = '#0A5B7A';
+                fileNameDisplay.style.fontWeight = 'bold';
+            }
+        });
+
+        async function fetchDocuments() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/assistant/documents`);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    renderDocuments(data.documents);
+                }
+            } catch (error) {
+                console.error('Error fetching documents:', error);
+                docsList.innerHTML = '<div class="status-message status-error">فشل تحميل المستندات</div>';
+            }
+        }
+
+        function renderDocuments(documents) {
+            if (documents.length === 0) {
+                docsList.innerHTML = '<div class="status-message status-info">لا توجد مستندات مرفوعة</div>';
+                return;
+            }
+
+            docsList.innerHTML = documents.map(doc => `
+                <div class="doc-item">
+                    <span class="doc-icon">📄</span>
+                    <div class="doc-info">
+                        <span class="doc-name" title="${doc.filename}">${doc.filename}</span>
+                        <span class="doc-meta">${doc.word_count} كلمة • ${new Date(doc.timestamp).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) {
+                showStatus(uploadStatus, 'يرجى اختيار ملف أولاً', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'جاري الرفع...';
+            showStatus(uploadStatus, 'جاري رفع وفهرسة المستند...', 'info');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/pdf/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus(uploadStatus, 'تم رفع وفهرسة المستند بنجاح!', 'success');
+                    fileInput.value = '';
+                    fileNameDisplay.textContent = 'اضغط لرفع ملف PDF';
+                    fileNameDisplay.style.color = '#666';
+                    fileNameDisplay.style.fontWeight = 'normal';
+                    fetchDocuments();
+
+                    // Add AI notification
+                    addMessage('assistant', `تمت إضافة المستند "${data.filename}" إلى قاعدة بياناتي. يمكنك الآن سؤالي عنه! 📚`);
+                } else {
+                    showStatus(uploadStatus, `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(uploadStatus, `خطأ في الاتصال: ${error.message}`, 'error');
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'رفع وفهرسة المستند';
+            }
+        }
+
+        function showStatus(container, message, type) {
+            container.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    if (container.firstChild && container.firstChild.textContent === message) {
+                        container.innerHTML = '';
+                    }
+                }, 5000);
+            }
+        }
+
+        uploadBtn.addEventListener('click', uploadFile);
 
         async function sendQuery() {
             const query = queryInput.value.trim();
