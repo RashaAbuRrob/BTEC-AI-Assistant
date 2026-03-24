@@ -22,26 +22,16 @@ class AIAssistant:
             else:
                 context_str = "لا توجد معلومات محددة في قاعدة البيانات"
             
-            # Prepare the prompt - answer as a BTEC expert
-            system_prompt = f"""أنت {self.name} ({self.name_en}).
-            أنت مساعد ذكي متخصص في مؤهلات BTEC والتعليم.
-            تجيب على جميع الأسئلة المتعلقة بـ BTEC بناءً على معرفتك الشاملة.
-            إذا كان لديك معلومات من قاعدة البيانات، استخدمها.
-            إذا لم تكن هناك معلومات محددة، استخدم معرفتك العامة عن BTEC."""
+            # If API key is available, use OpenAI
+            if self.api_key and self.api_key != 'your_openai_api_key_here':
+                return self.generate_with_openai(query, context)
             
-            user_message = f"""السياق والمعلومات:
-{context_str}
-
-السؤال: {query}
-
-الرجاء تقديم إجابة شاملة ومفيدة عن BTEC."""
-            
-            # Call OpenAI or mock response
-            response = self._generate_mock_response(query, context)
-            
-            return response
+            # Fallback to mock response
+            return self._generate_mock_response(query, context)
         except Exception as e:
-            raise Exception(f"Error generating response: {str(e)}")
+            print(f"Error generating response: {str(e)}")
+            # Fallback to mock on error
+            return self._generate_mock_response(query, context)
     
     def _clean_text(self, text):
         """Clean PDF extracted text by removing excessive dots and formatting artifacts"""
@@ -106,33 +96,42 @@ class AIAssistant:
         return f"سؤال مهم عن BTEC: '{query}'\n\n📚 للحصول على إجابة أفضل، يمكنك السؤال عن:\n• ما هو برنامج BTEC؟\n• مستويات ومؤهلات BTEC\n• التخصصات والمواضيع المتاحة\n• متطلبات الالتحاق\n• مدة البرنامج\n• فوائد البرنامج"
     
     def generate_with_openai(self, query, context):
-        """Generate response using OpenAI API"""
+        """Generate response using OpenAI API (v1.0.0+)"""
         try:
-            import openai
-            openai.api_key = self.api_key
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
             
             context_str = ""
-            if context:
-                context_str = "Relevant documents:\n"
+            if context and len(context) > 0:
+                context_str = "معلومات من قاعدة البيانات:\n"
                 for doc in context:
                     context_str += f"- {doc['filename']}: {doc['preview']}\n"
+            else:
+                context_str = "لا توجد معلومات محددة في قاعدة البيانات."
+
+            system_prompt = f"""أنت {self.name} ({self.name_en}).
+            أنت مساعد ذكي متخصص في مؤهلات BTEC والتعليم.
+            تجيب على جميع الأسئلة المتعلقة بـ BTEC بناءً على معرفتك الشاملة والمعلومات المقدمة.
+            استخدم المعلومات من قاعدة البيانات إذا كانت ذات صلة.
+            تحدث باللغة العربية بلهجة مهنية وودودة."""
+
+            user_message = f"""السياق:
+{context_str}
+
+السؤال: {query}
+
+الرجاء تقديم إجابة شاملة ومفيدة."""
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": f"You are {self.name}, a helpful BTEC assistant."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Context:\n{context_str}\n\nQuestion: {query}"
-                    }
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
                 ],
                 temperature=self.temperature,
                 max_tokens=AIAssistantConfig.MAX_TOKENS
             )
             
-            return response['choices'][0]['message']['content']
+            return response.choices[0].message.content
         except Exception as e:
             raise Exception(f"Error with OpenAI API: {str(e)}")
